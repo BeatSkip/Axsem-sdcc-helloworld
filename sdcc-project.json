@@ -1,0 +1,29 @@
+{
+  "name": "imagotag-axsem-ledtest",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src"
+  ],
+  "includes": [
+    "include",
+    "libraries/libmf/include"
+  ],
+  "defines": [],
+  "libraries": [
+    "lib"
+  ],
+  "components": [
+    "components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "firmware",
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "echo",
+    "args": [
+      "Flash tool not configured"
+    ]
+  }
+}

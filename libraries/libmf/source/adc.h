@@ -1,0 +1,176 @@
+/**
+******************************************************************************
+* @file adc.h
+* @brief ADC APIs declararion
+* @internal
+* @author   Sai Pramod Kumar D
+* $Rev: $
+* $Date: $
+******************************************************************************
+* Copyright 2016 Semiconductor Components Industries LLC (d/b/a “ON Semiconductor”).
+* All rights reserved.  This software and/or documentation is licensed by ON Semiconductor
+* under limited terms and conditions.  The terms and conditions pertaining to the software
+* and/or documentation are available at http://www.onsemi.com/site/pdf/ONSEMI_T&C.pdf
+* (“ON Semiconductor Standard Terms and Conditions of Sale, Section 8 Software”) and
+* if applicable the software license agreement.  Do not use this software and/or
+* documentation unless you have carefully read and you agree to the limited terms and
+* conditions.  By using this software and/or documentation, you agree to the limited
+* terms and conditions.
+*
+* THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
+* OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
+* MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
+* ON SEMICONDUCTOR SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL,
+* INCIDENTAL, OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
+* @endinternal
+*
+* @ingroup ADC
+*
+* @details
+*/
+
+#ifndef ADC_H
+#define ADC_H
+
+#include "cpu.h"
+#include "libmftypes.h"
+#include "axm0_config.h"
+#include "libmfwtimer.h"
+#include "libmfadc.h"
+
+#if defined __ARMEL__ || defined __ARMEB__
+#ifdef __AXM0F2
+
+#define AXM0_ADC_SAR_TEMP_OFFSET_MULT      			0x400
+#define AXM0_ADC_DUAL_SLOPE_CORRECTION       		0xF0000  			/* 15 in Q16.16 format */
+#define AXM0_ADC_SCALE_ADJUSTMENT             		8        			/* (effectively 0.5 << 4u) 0.5 in Q28.4 format */
+#define AXM0_ADC_HIGH_TEMPERATURE            		0x640000 			/* 100 in Q16.16 format */
+#define AXM0_ADC_LOW_TEMPERATURE             		0x280000 			/* 40 in Q16.16 format */
+#define AXM0_ADC_SCALE_ADJUSTMENT_DIVIDER     		16u
+#define AXM0_ADC_SAR_TEMP_DIVIDER             		0x10000
+#define AXM0_ADC_HALF_OF_ONE                 		0x00008000
+
+#define AXM0_ADC_SAR_SEQ_DCEN                       (0x20000000Lu)
+#define AXM0_ADC_SAR_SEQ_DLY_INC                    (0x00000001Lu)
+#define AXM0_ADC_SAR_SEQ_EOS_EOI_MASK               (0x00000011Lu)
+#define AXM0_ADC_SAR_SEQ_INJECTION_EOS_MASK         (0x00000010Lu)
+#define AXM0_ADC_SAR_SEQ_EOS_MASK                   (0x00000001Lu)
+#define AXM0_ADC_SAR_SEQ_SAR_INTR_MASK              (AXM0_ADC_SAR_SEQ_EOS_MASK)
+#define AXM0_ADC_SAR_SEQ_CONTINUOUS_EN              (0x00010000Lu)
+#define AXM0_ADC_SAR_SEQ_SAR_WRK_MAX_12BIT          (0x00001000Lu)
+#define AXM0_ADC_SAR_SEQ_10MV_COUNTS                (10000)
+#define AXM0_ADC_SAR_SEQ_RESULT_MASK                (0x0000FFFFLu)
+#define AXM0_ADC_SAR_SEQ_COUNTS_PER_10V             0x400
+
+#define AXM0_CSD_FILTER_DELAY_OFFSET 0x00000004u
+#define AXM0_CSD_SHIELD_DELAY_OFFSET 0x00000008u
+#define AXM0_CSD_SENSE_EN_OFFSET 0x0000000cu
+#define AXM0_CSD_CHARGE_MODE_OFFSET 0x0000000eu
+#define AXM0_CSD_MUTUAL_CAP_OFFSET 0x00000012u
+#define AXM0_CSD_CSX_DUAL_CNT_OFFSET 0x00000013u
+#define AXM0_CSD_DSI_COUNT_SEL_OFFSET 0x00000018u
+#define AXM0_CSD_DSI_SAMPLE_EN_OFFSET 0x00000019u
+#define AXM0_CSD_SAMPLE_SYNC_OFFSET 0x0000001au
+#define AXM0_CSD_DSI_SENSE_EN_OFFSET 0x0000001bu
+#define AXM0_CSD_LP_MODE_OFFSET 0x0000001eu
+#define AXM0_CSD_ENABLE_OFFSET 0x0000001fu
+#define AXM0_CSD_SAMPLE_OFFSET 0x00000001u
+#define AXM0_CSD_INIT_OFFSET 0x00000002u
+#define AXM0_CSD_ADC_RES_OFFSET 0x00000008u
+#define AXM0_CSD_HSCMP_EN_OFFSET 0x00000000u
+#define AXM0_CSD_HSCMP_INVERT_OFFSET 0x00000004u
+#define AXM0_CSD_AZ_EN_OFFSET 0x0000001fu
+#define AXM0_CSD_REFGEN_EN_OFFSET 0x00000000u
+#define AXM0_CSD_BYPASS_OFFSET 0x00000004u
+#define AXM0_CSD_VDDA_EN_OFFSET 0x00000005u
+#define AXM0_CSD_RES_EN_OFFSET 0x00000006u
+#define AXM0_CSD_GAIN_OFFSET 0x00000008u
+#define AXM0_CSD_VREFLO_SEL_OFFSET 0x00000010u
+#define AXM0_CSD_VREFLO_INT_OFFSET 0x00000017u
+#define AXM0_CSD_VAL_OFFSET 0x00000000u
+#define AXM0_CSD_POL_DYN_OFFSET 0x00000007u
+#define AXM0_CSD_POLARITY_OFFSET 0x00000008u
+#define AXM0_CSD_BAL_MODE_OFFSET 0x0000000au
+#define AXM0_CSD_LEG1_MODE_OFFSET 0x00000010u
+#define AXM0_CSD_LEG2_MODE_OFFSET 0x00000012u
+#define AXM0_CSD_DSI_CTRL_EN_OFFSET 0x00000015u
+#define AXM0_CSD_RANGE_OFFSET 0x00000016u
+#define AXM0_CSD_LEG1_EN_OFFSET 0x00000018u
+#define AXM0_CSD_LEG2_EN_OFFSET 0x00000019u
+#define AXM0_CSD_LEG3_EN_OFFSET 0x0000001au
+#define AXM0_CSD_SW_HMPM_OFFSET 0x00000000u
+#define AXM0_CSD_SW_HMPT_OFFSET 0x00000004u
+#define AXM0_CSD_SW_HMPS_OFFSET 0x00000008u
+#define AXM0_CSD_SW_HMMA_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_HMMB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_HMCA_OFFSET 0x00000014u
+#define AXM0_CSD_SW_HMCB_OFFSET 0x00000018u
+#define AXM0_CSD_SW_HMRH_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_HCCC_OFFSET 0x00000010u
+#define AXM0_CSD_SW_HCCD_OFFSET 0x00000014u
+#define AXM0_CSD_SW_HCRH_OFFSET 0x00000018u
+#define AXM0_CSD_SW_HCRL_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_HCAV_OFFSET 0x00000000u
+#define AXM0_CSD_SW_HCAG_OFFSET 0x00000004u
+#define AXM0_CSD_SW_HCBV_OFFSET 0x00000008u
+#define AXM0_CSD_SW_HCBG_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_HCCV_OFFSET 0x00000010u
+#define AXM0_CSD_SW_HCCG_OFFSET 0x00000014u
+#define AXM0_CSD_SW_IRBY_OFFSET 0x00000004u
+#define AXM0_CSD_SW_IRLB_OFFSET 0x00000008u
+#define AXM0_CSD_SW_ICA_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_ICB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_IRLI_OFFSET 0x00000014u
+#define AXM0_CSD_SW_IRH_OFFSET 0x00000018u
+#define AXM0_CSD_SW_IRL_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_BYA_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_BYB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_CBCC_OFFSET 0x00000014u
+#define AXM0_CSD_SW_SFPM_OFFSET 0x00000000u
+#define AXM0_CSD_SW_SFPT_OFFSET 0x00000004u
+#define AXM0_CSD_SW_SFPS_OFFSET 0x00000008u
+#define AXM0_CSD_SW_SFMA_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_SFMB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_SFCA_OFFSET 0x00000014u
+#define AXM0_CSD_SW_SFCB_OFFSET 0x00000018u
+#define AXM0_CSD_SW_SCRH_OFFSET 0x00000018u
+#define AXM0_CSD_SW_SCRL_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_IAIB_OFFSET 0x00000000u
+#define AXM0_CSD_SW_IBCB_OFFSET 0x00000004u
+#define AXM0_CSD_SW_SGMB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_SGRE_OFFSET 0x00000018u
+#define AXM0_CSD_SW_SGR_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_F1PM_OFFSET 0x00000000u
+#define AXM0_CSD_SW_F1MA_OFFSET 0x00000008u
+#define AXM0_CSD_SW_F1CA_OFFSET 0x00000010u
+#define AXM0_CSD_SW_C1CC_OFFSET 0x00000014u
+#define AXM0_CSD_SW_C1CD_OFFSET 0x00000018u
+#define AXM0_CSD_SW_C1F1_OFFSET 0x0000001cu
+#define AXM0_CSD_SW_F2PT_OFFSET 0x00000004u
+#define AXM0_CSD_SW_F2MA_OFFSET 0x00000008u
+#define AXM0_CSD_SW_F2CA_OFFSET 0x0000000cu
+#define AXM0_CSD_SW_F2CB_OFFSET 0x00000010u
+#define AXM0_CSD_SW_C2CC_OFFSET 0x00000014u
+#define AXM0_CSD_SW_C2CD_OFFSET 0x00000018u
+#define AXM0_CSD_SW_C2F2_OFFSET 0x0000001cu
+#define AXM0_CSD_ADC_TIME_OFFSET 0x00000000u
+#define AXM0_CSD_ADC_MODE_OFFSET 0x00000010u
+#define AXM0_CSD_START_OFFSET 0x00000000u
+#define AXM0_CSD_SEQ_MODE_OFFSET 0x00000001u
+#define AXM0_CSD_ABORT_OFFSET 0x00000003u
+#define AXM0_CSD_DSI_START_EN_OFFSET 0x00000004u
+#define AXM0_CSD_AZ0_SKIP_OFFSET 0x00000008u
+#define AXM0_CSD_AZ1_SKIP_OFFSET 0x00000009u
+
+typedef enum {
+    AXM0_ADC_VREF_CNT = 1,
+    AXM0_ADC_VREF_BY2_CNT = 2,
+    AXM0_ADC_VIN_CNT = 3
+} en_CapSenseADC_source;
+
+#define AZ_time                 10
+
+#endif /* __AXM0F2 */
+#endif /* defined __ARMEL__ || defined __ARMEB__ */
+
+#endif /* ADC_H */

@@ -1,0 +1,29 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "sdcc",
+			"request": "launch",
+			"name": "SDCC-MDF: Simulator (no UART)",
+			"simUart": "off"
+		},
+		{
+			"type": "sdcc",
+			"request": "launch",
+			"name": "SDCC-MDF: Simulator + virtual COM (Serial Monitor)",
+			"simUart": "monitor"
+		},
+		{
+			"type": "sdcc",
+			"request": "launch",
+			"name": "SDCC-MDF: Simulator + host COM port (passthrough)",
+			"simUart": "host"
+		},
+		{
+			"type": "sdcc",
+			"request": "launch",
+			"name": "SDCC-MDF: Hardware (attach to GDB server)",
+			"backend": "gdb"
+		}
+	]
+}

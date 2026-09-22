@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "sdcc",
+			"label": "SDCC: Build",
+			"action": "build",
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "sdcc",
+			"label": "SDCC: Flash",
+			"action": "flash",
+			"problemMatcher": []
+		},
+		{
+			"type": "sdcc",
+			"label": "SDCC: Clean",
+			"action": "clean",
+			"problemMatcher": []
+		}
+	]
+}

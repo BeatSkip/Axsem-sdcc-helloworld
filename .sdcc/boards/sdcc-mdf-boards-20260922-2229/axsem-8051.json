@@ -1,0 +1,24 @@
+{
+  "name": "Axsem AX8052F143",
+  "vendor": "Axsem",
+  "build": {
+    "cpu": "mcs51",
+    "mcu": "axsem-8052f143",
+    "f_cpu": "26000000UL",
+    "extra_flags": [],
+    "memory": {
+      "size_iram": 256,
+      "size_xram": 8192,
+      "size_code": 59389
+    },
+    "memory_model": "small",
+    "sdcc": {
+      "target": "mcs51"
+    }
+  },
+  "upload": {
+    "maximum_size": 262144,
+    "maximum_ram_size": 8448,
+    "protocol": "custom"
+  }
+}

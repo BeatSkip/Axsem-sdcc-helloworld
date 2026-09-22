@@ -1,0 +1,4 @@
+{
+    "sdcc.monitorBaud": 115200,
+    "sdcc.shellPath": "cmd.exe"
+}

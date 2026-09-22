@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "SDCC",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/libraries/libmf/include",
+                "C:/Program Files/SDCC/include",
+                "C:/Program Files/SDCC/include/mcs51",
+                "C:/Program Files/SDCC/non-free/include"
+            ],
+            "defines": [
+                "axsem-8052f143"
+            ],
+            "cStandard": "c11",
+            "intelliSenseMode": "windows-msvc-x64",
+            "compilerPath": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
