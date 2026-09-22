@@ -6,7 +6,8 @@
   ],
   "includes": [
     "include",
-    "libraries/libmf/include"
+    "libraries/libmf/include",
+    "libraries/libaxdvk2/include"
   ],
   "defines": [],
   "libraries": [

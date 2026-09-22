@@ -91,6 +91,53 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 & 'C:\Program Files\SDCC\bin\packihx.exe' 'build\firmware.ihx' > 'build\firmware.hex'
 ```
 
+## SPI & e-paper drivers
+
+`src/spi.c` / `src/spi.h` — minimal hardware SPI master driver for the AX8052 SPI unit
+(mode 0, MSB first; SCK=PC1, MOSI=PC2, MISO=PC3). Provides `spi_init()`, `spi_transfer()`,
+block `spi_write()`/`spi_read()`, and chip-select helpers for the three devices on the
+shared bus: EPD (PA1), NFC (PB1), FLASH (PC0).
+
+`src/epd.c` / `src/epd.h` — driver for the IL0373-based e-paper display
+(GDEW026Z39, driven as 152×296 BWR like the stock tag firmware). Uses the panel's
+OTP LUT (no LUT tables), full-frame updates only. Pixel bits: **0 = ink, 1 = white**
+in both planes (red plane bit 0 = red).
+
+```c
+#include "spi.h"
+#include "epd.h"
+
+/* one monochrome plane: 1 px = 1 bit, MSB = leftmost pixel */
+uint8_t __xdata bw[EPD_PLANE_BYTES];    /* 0 = black */
+uint8_t __xdata red[EPD_PLANE_BYTES];   /* 0 = red   */
+memset(bw, 0xFF, sizeof bw);            /* start all white */
+memset(red, 0xFF, sizeof red);
+
+spi_init();                             /* after periph_init() */
+epd_init();                             /* resets + clears to white */
+
+epd_plane_ink(bw, 10, 10);              /* draw some pixels… */
+epd_upload(0x10, bw, EPD_PLANE_BYTES);  /* stream B/W plane      */
+epd_upload(0x13, red, EPD_PLANE_BYTES); /* stream red plane      */
+epd_refresh();                          /* refresh + wait BUSY   */
+epd_sleep();                            /* deep sleep when done  */
+```
+
+The two planes together (11.2 KB) exceed the 8 KB XRAM, so stream them in two
+`epd_upload()` calls while reusing one buffer (as above); static images can live in
+`const` (CODE/flash) memory and be passed straight to `epd_upload()`. `epd_clear(0xFF, 0xFF)`
+paints the whole screen white without any buffer, `epd_clear(0x00, 0x00)` all black.
+
+Caveats:
+
+- **BUSY polarity:** these tags drive BUSY **active-low** (the bare Good Display module
+  is active-high; the tag inverts the line). `epd.c` defaults to low; flip
+  `EPD_BUSY_ACTIVE_HIGH` if `epd_init()` hangs or refreshes corrupt.
+- **RST shares PB5 with the UART TX function** (per `board.h`) — don't pulse the e-paper
+  reset while the UART is mid-transmission.
+- Init values are pinned down in `GDEW026Z39-init-reference.md` (three independent
+  implementations of the exact Z39 sequence).
+
 ## Build configuration
 
 - **MCU:** Axsem AX8052F143 — board definition in `.sdcc/boards/sdcc-mdf-boards-*/axsem-8051.json`
@@ -99,7 +146,8 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 - **Memory:** IRAM 256 B · XRAM 8192 B · CODE 59 389 B (the top of the 64 KB flash
   is reserved, matching the original IAR linker setup).
 - **F_CPU:** 26 MHz.
-- Current firmware usage: **≈4 KB flash, ≈0.4 KB XRAM, 222 B stack** — plenty of headroom.
+- Current firmware usage (LED test + SPI/EPD drivers linked): **≈5 KB flash, ≈0.4 KB XRAM,
+  206 B stack** — plenty of headroom.
 
 ### Notes & gotchas
 
