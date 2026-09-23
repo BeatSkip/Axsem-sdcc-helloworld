@@ -72,11 +72,11 @@ static void epd_delay_ms(uint16_t ms)
 
 void epd_init(void)
 {
-    /* Control pins: DC out, RST out, BUSY in. CS (PA0) is set up by
+    /* Control pins: DC out, RST out, BUSY in. CS (PA1) is set up by
      * spi_init(). NOTE: RST shares PB5 with the UART RX function - the
      * UART must not be enabled while the panel is being driven (the boot
      * demo in main.c therefore does not init UART0). */
-    DIRA |= 0x02;                       /* DC on PA1, output */
+    DIRA |= 0x01;                       /* DC on PA0, output */
     DIRB |= 0x20;                       /* RST on PB5, output */
     DIRB &= (uint8_t)~0x04;             /* BUSY on PB2, input */
     EPD_DC = 1;

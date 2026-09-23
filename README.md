@@ -51,8 +51,8 @@ Full authoritative mapping: `documentation/signal-list.md`.
 | LED red | `PC4` | active low |
 | UART0 TX / RX | `PB4` / `PB5` | 38400 8N1, timer 0 baud (off while the e-paper is driven) |
 | SPI SCK / MOSI / MISO | `PC1` / `PC2` / `PC3` | hardware SPI unit |
-| CS flash / NFC / EPD | `PC0` / `PB1` / `PA0` | active low |
-| EPD D/C, RST, BUSY | `PA1`, `PB5`, `PB2` | D/C: 0 = command, 1 = data |
+| CS flash / NFC / EPD | `PC0` / `PB1` / `PA1` | active low |
+| EPD D/C, RST, BUSY | `PA0`, `PB5`, `PB2` | D/C: 0 = command, 1 = data |
 | NFC field detect / boot | `PB3` | |
 | Transistor U4 / U5 | `PA5` / `PA2` | function not identified yet |
 

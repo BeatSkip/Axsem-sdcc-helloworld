@@ -1,6 +1,6 @@
 ### Port A 
-- PA:0 - [SPI] CS (E-Ink)
-- PA:1 - [E-Ink] D/C 
+- PA:0 - [E-Ink] D/C
+- PA:1 - [SPI] CS (E-Ink)
 - PA:2 - Transistor U5
 - PA:3 - Crystal Oscillator P
 - PA:4 - Crystal Oscillator N

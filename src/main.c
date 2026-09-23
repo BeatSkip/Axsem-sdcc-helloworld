@@ -1,178 +1,222 @@
 /**
  * @file main.c
- * @brief Flash dump over UART
+ * @brief E-paper display SPI bring-up test (GDE 2.6" panel)
  *
- * Boots, powers the transistor lines, brings up UART0 (38400 8N1 on
- * PB4=TX / PB5=RX) and the SPI unit, then streams the whole SPI flash
- * as a hexdump:
+ * Pure LED-based test, no UART involved (UART0 shares its RX pin with
+ * the panel's reset line, so it stays completely off).
  *
- *   000000: FF FF 00 11 ...  |................|
+ * The panel's only reliable feedback is the BUSY pin, and the tag's
+ * BUSY polarity varies between revisions - so the test watches for
+ * LEVEL CHANGES (edges) instead of absolute levels, which works with
+ * either polarity.
  *
- * 38400 baud = the AXSEM serial bootloader's rate, so the same hookup
- * works for bootloader and dump (see tools/flashdump.py).
- * Capture it with any serial terminal; reset the tag to dump again.
+ *   green (PB6) = refresh started and finished  -> SPI link works
+ *   red   (PC4) = refresh started but BUSY never returned -> stuck panel
+ *   blue  (PB7) = no BUSY reaction at all -> no panel / no SPI link
+ *
+ * On blue, the red LED (PC4) first flashes the failing phase:
+ *   1 flash = no reaction to power-on (0x04) - noted, test continues
+ *   2 flashes = no reaction to the refresh command (0x12) - fatal
  */
 
 #include <ax8052f143.h>
 #include <libmf.h>
 #include <libmftypes.h>
-#include <libmfuart.h>
-#include <libmfuart0.h>
 #include "hal.h"
 #include "board.h"
 #include "pwr.h"
 #include "spi.h"
-#include "flash.h"
+#include "epd.h"        /* EPD_W/EPD_H/EPD_PLANE_BYTES */
 
-/* ── UART output ────────────────────────────────────────────────────────
- * The prebuilt libmf.lib has broken UART FIFO size tables in this link
- * (the TX buffer-size table reads 0x75 instead of 0x40), which wedges
- * libmf's uart0_tx()/uart0_writestr() after a few bytes. So TX goes
- * straight to the UART registers instead - the same hardware sequence
- * the vendor's iocore performs, minus the buffer machinery:
- *
- *   while (!(U0STATUS & 0x04));   // wait for TX empty (U0TXEMPTY)
- *   U0SHREG = c;                  // start transmitting
- *   U0CTRL |= 0x08;               // arm the TX-done flag, like iocore
- */
+/* ── small helpers ────────────────────────────────────────────────────── */
 
-static void uart_putc(uint8_t c)
+static void ms_delay(uint16_t ms)
 {
-    while (!(U0STATUS & 0x04))
-        ;
-    U0SHREG = c;
-    U0CTRL |= 0x08;
+    while (ms--)
+        delay(1000);
 }
 
-static void uart_puts(const char *s)
+/* Poll BUSY until it equals target (1 = busy) or timeout_ms elapses.
+ * Returns 1 when the target level was reached, 0 on timeout. */
+static uint8_t wait_busy_level(uint8_t target, uint16_t timeout_ms)
 {
-    while (*s)
-        uart_putc((uint8_t)*s++);
+    uint16_t t = timeout_ms;
+    while (EPD_BUSY != target) {
+        if (!--t)
+            return 0;
+        delay(1000);
+    }
+    return 1;
 }
 
-/* Wait until everything has left the shift register (U0TXEMPTY and
- * U0TXIDLE both set - the same test the bootloader's 'R' uses). */
-static void uart_flush(void)
+/* Poll BUSY until it leaves the given level (an edge either way).
+ * Returns 1 when the level changed, 0 on timeout. */
+static uint8_t wait_busy_edge(uint8_t level, uint16_t timeout_ms)
 {
-    while (0x44 & (uint8_t)~U0STATUS)
-        ;
+    uint16_t t = timeout_ms;
+    while (EPD_BUSY == level) {
+        if (!--t)
+            return 0;
+        delay(1000);
+    }
+    return 1;
 }
 
-static void uart_puthex8(uint8_t v)
+static void epd_write_cmd(uint8_t cmd)
 {
-    static const char hex[] = "0123456789ABCDEF";
-    uart_putc(hex[v >> 4]);
-    uart_putc(hex[v & 0x0F]);
+    EPD_DC = 0;
+    spi_select(SPI_DEV_EPD);
+    spi_transfer(cmd);
+    spi_deselect(SPI_DEV_EPD);
+    EPD_DC = 1;
 }
 
-static void uart_puthex24(uint32_t v)
+static void epd_write_data(uint8_t data)
 {
-    uart_puthex8((uint8_t)(v >> 16));
-    uart_puthex8((uint8_t)(v >> 8));
-    uart_puthex8((uint8_t)v);
+    spi_select(SPI_DEV_EPD);
+    spi_transfer(data);
+    spi_deselect(SPI_DEV_EPD);
 }
+
+/* Upload one full plane of a constant value (white = 0xFF). */
+static void epd_fill_plane(uint8_t cmd, uint8_t value)
+{
+    uint16_t i;
+    epd_write_cmd(cmd);
+    spi_select(SPI_DEV_EPD);
+    for (i = 0; i < EPD_PLANE_BYTES; i++)
+        spi_transfer(value);
+    spi_deselect(SPI_DEV_EPD);
+}
+
+/* ── result signalling ────────────────────────────────────────────────── */
+
+/* The red LED on this tag lights at logic HIGH (observed: it stays lit
+ * while the result LEDs blink their LOW-based patterns). */
+#define LEDR_ACTIVE_HIGH 1
+
+static void led_red(uint8_t on)
+{
+#if LEDR_ACTIVE_HIGH
+    if (on)
+        PIN_SET_HIGH(LEDR_PORT, LEDR_PIN);
+    else
+        PIN_SET_LOW(LEDR_PORT, LEDR_PIN);
+#else
+    if (on)
+        PIN_SET_LOW(LEDR_PORT, LEDR_PIN);
+    else
+        PIN_SET_HIGH(LEDR_PORT, LEDR_PIN);
+#endif
+}
+
+/* Continuous 500 ms on / 500 ms off in the result colour. A macro
+ * because the port argument must be the SFR itself, not its value. */
+#define BLINK_FOREVER(port, pin) do {                                   \
+        for (;;) {                                                      \
+            PIN_SET_LOW(port, pin);                                     \
+            ms_delay(500);                                              \
+            PIN_SET_HIGH(port, pin);                                    \
+            ms_delay(500);                                              \
+        }                                                               \
+    } while (0)
+
+/* n short flashes on the red LED, then the steady result colour.
+ * The red indicator ends in its OFF state before the result blink. */
+#define FAIL(phase, port, pin) do {                                     \
+        uint8_t __k = (phase);                                          \
+        while (__k--) {                                                 \
+            led_red(1);                                                 \
+            ms_delay(200);                                              \
+            led_red(0);                                                 \
+            ms_delay(200);                                              \
+        }                                                               \
+        ms_delay(1000);                                                 \
+        BLINK_FOREVER(port, pin);                                       \
+    } while (0)
 
 void main()
 {
-    uint32_t addr;
-    uint8_t i;
-    uint8_t buf[16];
-    uint8_t id[3];
+    uint8_t level;
 
     periph_init();
 
     /* Power rails via the PA2/PA5 transistor lines (see pwr.h) - the
-     * flash needs its supply before anything else happens. */
+     * display supply may hang off one of these. */
     pwr_init();
     pwr_on();
 
-    /* Debug marker: two short LED blinks = reached main, before UART. */
-    PIN_SET_LOW(LEDB_PORT, LEDB_PIN);
-    delay(25000);
-    PIN_SET_HIGH(LEDB_PORT, LEDB_PIN);
-    delay(25000);
-    PIN_SET_LOW(LEDB_PORT, LEDB_PIN);
-    delay(25000);
-    PIN_SET_HIGH(LEDB_PORT, LEDB_PIN);
-    delay(25000);
-
-    /* UART0 on PB4(TX) / PB5(RX) - the SAME pins the AXSEM serial
-     * bootloader uses (PALTB = 0x10, PB4 output, PB5 input) and the
-     * only UART pins wired to the serial converter on this tag. The
-     * dump only transmits; PB5 stays configured as the bootloader
-     * leaves it (U0RX input via the PINSEL reset default). */
-    PALTB |= 0x10;                  /* PB4 -> U0TX alternate function */
-    DIRB  |= 0x10;                  /* PB4 = output */
-    DIRB  &= (uint8_t)~0x20;        /* PB5 = input (U0RX) */
-    PORTB |= 0x30;                  /* TX idle high, RX latch high */
-
-    /* Start the 20 MHz FRC oscillator and slave it to the 32 kHz LPX
-     * crystal - byte-for-byte the sequence the AXSEM serial bootloader
-     * runs on this tag. Without it the FRC runs free at ~10 MHz +/-10%
-     * and the UART baud rate is wrong. */
-    FRCOSCREF = 19531;
-    FRCOSCKFILT = 2800;
-    LPXOSCGM = 0x90;
-    OSCFORCERUN |= 0x04;                        /* force the FRC to run */
-    FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;    /* FRC slaved to LPXOSC, x2 = ~20 MHz */
-    WTCFGB = (1 << 3) | CLKSRC_LPXOSC;
-    {
-        uint8_t i = 128;
-        OSCCALIB = 0x01;
-        IE_5 = 1;                               /* clock-management IRQ wakes standby */
-        do {
-            while (!(OSCCALIB & 0x40))
-                enter_standby();
-            (void)FRCOSCFREQ1;                  /* feed the calibration filter */
-        } while (--i);
-        IE_5 = 0;
-        OSCCALIB = 0x00;
-    }
-
-    uart_timer0_baud(CLKSRC_FRCOSC, 38400, 20000000);
-    uart0_init(0, 8, 1);        /* enables the UART hardware; TX is driven
-                                 * directly via uart_putc() (EA stays off) */
-
-    uart_puts("\r\n*** imagotag flash dump ***\r\n");
-
     spi_init();
-    extflash_release_powerdown();
-    extflash_read_jedec_id(id);
-    uart_puts("JEDEC ID: ");
-    uart_puthex8(id[0]);
-    uart_putc(' ');
-    uart_puthex8(id[1]);
-    uart_putc(' ');
-    uart_puthex8(id[2]);
-    uart_puts("\r\n");
 
-    for (addr = 0; addr < FLASH_SIZE; addr += 16)
-    {
-        extflash_read(addr, buf, 16);
-        uart_puthex24(addr);
-        uart_puts(": ");
-        for (i = 0; i < 16; i++)
-        {
-            uart_puthex8(buf[i]);
-            uart_putc(' ');
-        }
-        uart_puts(" |");
-        for (i = 0; i < 16; i++)
-        {
-            uint8_t c = buf[i];
-            uart_putc((c >= 32 && c <= 126) ? c : '.');
-        }
-        uart_puts("|\r\n");
+    /* EPD control pins: DC out (PA0), RST out (PB5), BUSY in (PB2).
+     * CS (PA1) is set up by spi_init(). No UART is enabled, so PB5
+     * belongs to the reset line alone. */
+    DIRA |= 0x01;
+    DIRB |= 0x20;
+    DIRB &= (uint8_t)~0x04;
+    EPD_DC = 1;
+    EPD_RST = 1;
+
+    /* Hardware reset: 100 ms low, 100 ms settle (the proven reference
+     * drivers use 100-200 ms; a short pulse may not reach the panel
+     * through the tag's reset circuit). */
+    EPD_RST = 0;
+    ms_delay(100);
+    EPD_RST = 1;
+    ms_delay(100);
+
+    /* Booster soft start */
+    epd_write_cmd(0x06);
+    epd_write_data(0x17);
+    epd_write_data(0x17);
+    epd_write_data(0x17);
+
+    /* Power on: the panel may pulse BUSY while boosting. If it does
+     * not, note it with a single red flash - but keep going: some
+     * panels only react to the refresh command, and the DRF check
+     * below is the definitive SPI test. */
+    level = EPD_BUSY;
+    epd_write_cmd(0x04);
+    if (!wait_busy_edge(level, 1500)) {
+        led_red(1);
+        ms_delay(200);
+        led_red(0);
+        ms_delay(800);
     }
 
-    uart_puts("*** end of dump ***\r\n");
-    uart_flush();
+    /* Let the booster pulse settle */
+    wait_busy_level(level, 2500);
 
-    while (1)
-    {
-        PIN_SET_LOW(LEDB_PORT, LEDB_PIN);
-        delay(25000);
-        PIN_SET_HIGH(LEDB_PORT, LEDB_PIN);
-        delay(25000);
-    }
+    /* Panel setting: LUT from OTP, BWR */
+    epd_write_cmd(0x00);
+    epd_write_data(0x0F);
+
+    /* Resolution from epd.h (152x296 for the GDEW026Z39). 3-byte form. */
+    epd_write_cmd(0x61);
+    epd_write_data((uint8_t)EPD_W);
+    epd_write_data((uint8_t)((uint16_t)EPD_H >> 8));
+    epd_write_data((uint8_t)EPD_H);
+
+    /* VCOM and data interval */
+    epd_write_cmd(0x50);
+    epd_write_data(0x77);
+
+    /* White frame into both planes */
+    epd_fill_plane(0x10, 0xFF);
+    epd_fill_plane(0x13, 0xFF);
+
+    /* Trigger the refresh; the panel only reacts if the command
+     * arrived intact. */
+    level = EPD_BUSY;
+    epd_write_cmd(0x12);
+    if (!wait_busy_edge(level, 3000))
+        FAIL(2, LEDB_PORT, LEDB_PIN);       /* blue, 2 flashes: no DRF reaction */
+
+    /* The refresh takes ~2-15 s; wait for BUSY to return. */
+    if (!wait_busy_level(level, 25000))
+        BLINK_FOREVER(LEDR_PORT, LEDR_PIN); /* red: update never finished */
+
+    epd_write_cmd(0x02);                    /* POF */
+
+    BLINK_FOREVER(LEDG_PORT, LEDG_PIN);     /* green: SPI link works */
 }

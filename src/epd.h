@@ -9,8 +9,8 @@
  * bytes accordingly.)
  *
  * Wiring (this board, see documentation/signal-list.md):
- *   PA0 = CS       (active low)
- *   PA1 = D/C      (0 = command, 1 = data)
+ *   PA0 = D/C      (0 = command, 1 = data)
+ *   PA1 = CS       (active low)
  *   PB2 = BUSY     (input; LOW = busy on these tags - see epd.c)
  *   PB5 = RST      (active low; NOTE: shared with the UART RX function -
  *                   UART0 must be off while the panel is driven)
