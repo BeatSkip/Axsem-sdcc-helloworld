@@ -20,7 +20,7 @@ void spi_init(void)
     DIRC &= (uint8_t)~0x08;
 
     /* All chip selects idle high, as outputs */
-    DIRA |= 0x02;                   /* EPD CS on PA1 */
+    DIRA |= 0x01;                   /* EPD CS on PA0 */
     DIRB |= 0x02;                   /* NFC CS on PB1 */
     DIRC |= 0x01;                   /* FLASH CS on PC0 */
     CS_EPD   = 1;

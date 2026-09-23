@@ -8,12 +8,12 @@
  * (GDEW0213Z16 2.13" panels: change EPD_W/EPD_H and the epd_init() TRES
  * bytes accordingly.)
  *
- * Wiring (this board):
- *   PA0 = D/C      (0 = command, 1 = data)
- *   PA1 = CS       (active low)
+ * Wiring (this board, see documentation/signal-list.md):
+ *   PA0 = CS       (active low)
+ *   PA1 = D/C      (0 = command, 1 = data)
  *   PB2 = BUSY     (input; LOW = busy on these tags - see epd.c)
- *   PB5 = RST      (active low; NOTE: shared with the UART TX function per
- *                   board.h - don't pulse it while the UART is sending)
+ *   PB5 = RST      (active low; NOTE: shared with the UART RX function -
+ *                   UART0 must be off while the panel is driven)
  *   SPI: PC1 = SCK, PC2 = MOSI (see spi.h)
  *
  * Framebuffer format (BWR, one bit per pixel per plane):

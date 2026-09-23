@@ -10,23 +10,28 @@ instead, using the **SDCC-MDF** extension for VS Code.
 
 ## Current status
 
-- The project **builds cleanly with SDCC**; roughly 5 KB of the ~58 KB usable flash is used.
-- `main.c` is still the original **LED blink test** — it brings up the GPIOs, UART0 and the
-  SPI unit, then toggles the blue LED.
-- **SPI and e-paper drivers are implemented but not yet verified on hardware.** The init
-  sequence was transcribed from three independent drivers for this exact panel, so it is
-  close to correct, but the BUSY polarity in particular needs a real-device check (see below).
+- The project **builds cleanly with SDCC**; roughly 18 KB of the ~58 KB usable flash is used.
+- `main.c` is a **flash dump tool**: it boots, powers the transistor lines, brings up UART0
+  (38400 8N1 — the AXSEM bootloader rate) and the SPI unit, then streams the whole SPI flash
+  over UART as a hexdump (JEDEC ID first), then blinks the blue LED. Reset the tag to dump
+  again; `tools/flashdump.py` automates the reset (boot pin via DTR, reset via RTS) and
+  saves the dump to a file.
+- **SPI and e-paper drivers are implemented but not yet verified on hardware.** The e-paper
+  init sequence was transcribed from three independent drivers for this exact panel, but
+  `main.c` no longer calls it; the BUSY polarity question is still open (see below).
 - **Flashing is not configured.** The `upload` section of `sdcc-project.json` is a
   placeholder. The AX8052F143 is programmed over its debug link, which no tool in this repo
   drives yet.
-- The NFC chip and serial flash have chip-select support in the SPI driver, but no device
-  drivers. The transistor-driven lines on PA2/PA5 are not yet identified.
+- The NFC chip has chip-select support in the SPI driver, but no device driver. The
+  transistor-driven lines on PA2/PA5 are driven by `pwr.c` (config in `pwr.h`), their loads
+  still unidentified.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/` | Application code: `main.c`, `board.c/h`, `hal.h`, and the SPI/EPD drivers `spi.c/h`, `epd.c/h` |
+| `src/` | Application code: `main.c` (flash dumper), `board.c/h`, `hal.h`, drivers `spi.c/h`, `epd.c/h`, `flash.c/h`, `pwr.c/h`, and the generated boot image `epd_image.c/h` |
+| `tools/` | Helper scripts: `png2epd.py` converts a PNG into e-paper plane data |
 | `include/` | Project-local headers (currently empty) |
 | `lib/` | Prebuilt Axsem LibMF SDK libraries as SDCC archives: `libmf`, `libaxdvk2`, `libaxdsp`, `libmfcrypto` |
 | `libraries/` | Full Axsem SDK source tree (IAR/Keil/SDCC/ARM build makefiles and headers) |
@@ -38,18 +43,22 @@ instead, using the **SDCC-MDF** extension for VS Code.
 
 ## Pin map
 
+Full authoritative mapping: `documentation/signal-list.md`.
+
 | Function | Pin | Notes |
 |---|---|---|
 | LED white / blue / green | `PB0` / `PB7` / `PB6` | active low |
 | LED red | `PC4` | active low |
-| UART0 RX / TX | `PB4` / `PB5` | 115200 8N1, timer 0 baud |
+| UART0 TX / RX | `PB4` / `PB5` | 38400 8N1, timer 0 baud (off while the e-paper is driven) |
 | SPI SCK / MOSI / MISO | `PC1` / `PC2` / `PC3` | hardware SPI unit |
-| CS flash / NFC / EPD | `PC0` / `PB1` / `PA1` | active low |
-| EPD D/C, RST, BUSY | `PA0`, `PB5`, `PB2` | D/C: 0 = command, 1 = data |
-| NFC field detect | `PB3` | |
+| CS flash / NFC / EPD | `PC0` / `PB1` / `PA0` | active low |
+| EPD D/C, RST, BUSY | `PA1`, `PB5`, `PB2` | D/C: 0 = command, 1 = data |
+| NFC field detect / boot | `PB3` | |
+| Transistor U4 / U5 | `PA5` / `PA2` | function not identified yet |
 
-One conflict worth knowing about: **EPD reset shares PB5 with the UART TX function.**
-Resetting the panel mid-transmission will corrupt the byte in flight.
+One conflict worth knowing about: **EPD reset shares PB5 with the UART RX function.**
+Enabling UART0 hands the pin to the UART, so the boot demo leaves UART0 off — if a future
+firmware needs UART, it must release PB5 (or reset the panel) before driving the display.
 
 ## Building
 
@@ -86,6 +95,25 @@ Memory model is `--model-small`, with 256 B IRAM, 8 KB XRAM and ~58 KB code (the
 
 ## Drivers
 
+### Transistor lines — `src/pwr.h`
+
+Controls the unidentified transistor lines PA2 (U5) and PA5 (U4). Which pins are driven and
+their polarity are `#define`s at the top of `pwr.h`:
+
+```c
+#define PWR_USE_U4  1       /* PA5 */      #define PWR_USE_U5  1       /* PA2 */
+#define PWR_U4_ACTIVE_HIGH  1              #define PWR_U5_ACTIVE_HIGH  1
+
+pwr_init();                /* selected pins become outputs, driven off */
+pwr_on();                  /* drive all selected pins to their on level */
+pwr_off();
+pwr_pulse(100, 100, 0);    /* 100 ms on, 100 ms off, forever */
+```
+
+The boot demo calls `pwr_on()` before touching the panel, on the assumption one of the
+transistors gates the display supply. If that misbehaves, flip the polarity defines or
+disable one pin and rebuild.
+
 ### SPI — `src/spi.h`
 
 A thin wrapper over the AX8052's built-in SPI unit, mode 0, MSB first — the same
@@ -93,6 +121,16 @@ configuration the vendor's own LCD code uses. Provides `spi_init()`, `spi_transf
 `spi_write()`/`spi_read()`, and chip-select helpers for the three slaves on the bus
 (EPD, NFC, flash). The SPI clock source is a `#define` at the top of the header; the default
 (0xD8) is the LibMF LCD driver's setting, and 0x06 (SYSCLK) also works.
+
+### Serial flash — `src/flash.h`
+
+Thin 25-series SPI NOR driver: `extflash_release_powerdown()`, `extflash_read_jedec_id()`,
+`extflash_read()`. The dump size lives in `FLASH_SIZE` (default 128 KiB for the suspected
+1 Mbit chip; the JEDEC capacity byte tells the truth). The boot firmware prints the JEDEC ID
+and a full hexdump of the chip on UART0 at 38400 8N1 (TX = PB4); `tools/flashdump.py`
+resets the board (boot pin via DTR, reset via RTS, same wiring as `tools/axsem-flasher.py`)
+and saves the stream to a file. Use `--bootloader` to reset into the serial bootloader
+instead.
 
 ### E-paper — `src/epd.h`
 
@@ -125,8 +163,24 @@ epd_sleep();                            /* panel deep sleep */
 `epd_clear(0xFF, 0xFF)` wipes the screen white without any buffer; static images can live in
 `const` (flash) and be passed straight to `epd_upload()`.
 
+### Boot image
+
+`main.c` shows `polyform-eink.png` on boot. The image was converted to the two 1-bit
+planes in `src/epd_image.c` by:
+
+```
+python tools/png2epd.py polyform-eink.png --dither
+```
+
+The converter composites transparency over white, quantizes to black/white/red
+(optionally with Floyd-Steinberg dithering) and rotates the image to the panel's mounted
+orientation. If the logo shows up sideways on the tag, regenerate with a different
+`--rotate` (0/90/180/270; 90 = image's left edge on top).
+
 Two hardware notes that will matter on first bring-up:
 
+- **UART0 is off in the demo.** Its RX pin (PB5) doubles as the panel reset line; with the
+  UART enabled, the pin belongs to the UART and the reset pulse never reaches the panel.
 - **BUSY polarity.** Every driver found for this panel on this tag polls BUSY *low* while
   busy — the tag board inverts the line, although the bare Good Display module is
   active-high. `epd.c` defaults to active-low. If `epd_init()` hangs or updates render

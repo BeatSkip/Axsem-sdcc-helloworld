@@ -44,8 +44,8 @@
 #define LEDG_PIN 6
 #define LEDR_PIN 4
 
-#define UART_RX PORTB_4
-#define UART_TX PORTB_5
+#define UART_RX PORTB_5
+#define UART_TX PORTB_4
 #define UART_PORT PORTB
 #define UART_DIR DIRB
 
@@ -58,7 +58,7 @@
 #define CS_NFC_DIR DIRB
 #define CS_NFC_PORT PORTB
 
-#define CS_EPD PORTA_1
+#define CS_EPD PORTA_0
 #define CS_EPD_DIR DIRA
 #define CS_EPD_PORT PORTA
 
@@ -73,7 +73,7 @@
 #define NFC_FD_DIR DIRB
 #define NFC_FD_PORT PORTB
 
-#define EPD_DC PORTA_0
+#define EPD_DC PORTA_1
 #define EPD_DC_DIR DIRA
 #define EPD_DC_PORT PORTA
 

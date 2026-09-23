@@ -7,9 +7,9 @@
  * vendor LibMF SDK uses to drive SPI displays (see libraries/libmf/source/
  * lcdinit.c), and exactly what the IL0373 e-paper controller expects.
  *
- * Pin assignments (see board.h):
+ * Pin assignments (see board.h and documentation/signal-list.md):
  *   PC1 = SCK, PC2 = MOSI, PC3 = MISO
- *   chip selects: PA1 = EPD, PB1 = NFC, PC0 = FLASH (all active low)
+ *   chip selects: PA0 = EPD, PB1 = NFC, PC0 = FLASH (all active low)
  *
  * Register semantics (verified against vendor SDK usage):
  *   SPCLKSRC  bits[2:0] = clock source (same values as the CLKSRC_* enum
@@ -29,8 +29,8 @@
 #include <libmftypes.h>
 
 /* SPI clock source byte (see header comment). Change the #define to tune. */
-#define SPI_CLKSRC_BYTE  0xD8    /* vendor display clock (LibMF lcdinit.c) */
-/* #define SPI_CLKSRC_BYTE 0x06 */   /* SYSCLK, prescaler 1 (board.h default) */
+#define SPI_CLKSRC_BYTE  0x06    /* SYSCLK, prescaler 1 (board.h default) */
+// #define SPI_CLKSRC_BYTE 0xD8   /* vendor display clock (LibMF lcdinit.c) */
 
 /* Devices on the shared SPI bus */
 typedef enum {
